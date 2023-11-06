@@ -14,10 +14,15 @@ import (
 )
 
 var (
-	RequestTimeOut = time.Second * 5
-
-	ErrNoResponse = errors.New("no response from url")
+	ErrTimeoutExceeded = errors.New("timeout exceeded")
 )
+
+type UrlIn struct {
+	Urls         []string
+	IsSequential bool
+	OutFileName  string
+	ReqTimeout   int
+}
 
 type UrlOut struct {
 	Sequence      int
@@ -27,23 +32,23 @@ type UrlOut struct {
 	ProcessedIn   float64
 }
 
-func Handle(urls []string, sequentially bool, outFileName string) error {
-	switch sequentially {
+func Handle(in UrlIn) error {
+	switch in.IsSequential {
 	case true:
-		out := KeepSequence(urls)
-		if outFileName != "" {
-			return writeToFile(out, outFileName)
+		out := KeepSequence(in.Urls, in.ReqTimeout)
+		if in.OutFileName != "" {
+			return writeToFile(out, in.OutFileName)
 		} else {
 			printData(out)
 		}
 	case false:
-		FastHandle(urls)
+		FastHandle(in.Urls, in.ReqTimeout)
 	}
 
 	return nil
 }
 
-func KeepSequence(urls []string) []UrlOut {
+func KeepSequence(urls []string, reqTimeout int) []UrlOut {
 	c := make(chan UrlOut)
 
 	wg := &sync.WaitGroup{}
@@ -55,7 +60,7 @@ func KeepSequence(urls []string) []UrlOut {
 				defer wg.Done()
 
 				now := time.Now()
-				lenght, err := get(url)
+				lenght, err := get(url, reqTimeout)
 				procT := time.Since(now).Seconds()
 				ans := UrlOut{
 					Sequence:      idx,
@@ -84,7 +89,7 @@ func KeepSequence(urls []string) []UrlOut {
 	return out
 }
 
-func FastHandle(urls []string) {
+func FastHandle(urls []string, reqTimeout int) {
 	wg := &sync.WaitGroup{}
 	wg.Add(len(urls))
 	for _, val := range urls {
@@ -92,7 +97,7 @@ func FastHandle(urls []string) {
 			defer wg.Done()
 
 			now := time.Now()
-			lenght, err := get(url)
+			lenght, err := get(url, reqTimeout)
 			procT := time.Since(now).Seconds()
 			out := UrlOut{
 				Url:           url,
@@ -109,12 +114,17 @@ func FastHandle(urls []string) {
 	wg.Wait()
 }
 
-func get(url string) (int64, error) {
+func get(url string, timeout int) (int64, error) {
+	factor := 5
+	if timeout != 0 {
+		factor = timeout
+	}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return 0, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(RequestTimeOut))
+	ctx, cancel := context.WithTimeout(context.Background(),
+		time.Duration(time.Second*time.Duration(factor)))
 	defer cancel()
 	req = req.WithContext(ctx)
 
@@ -122,7 +132,7 @@ func get(url string) (int64, error) {
 	resp, err := client.Do(req)
 	if err != nil {
 		if strings.Contains(err.Error(), "context deadline exceeded") {
-			return 0, ErrNoResponse
+			return 0, ErrTimeoutExceeded
 		}
 		return 0, err
 	}
@@ -181,10 +191,10 @@ func createStrFromUrlOut(out UrlOut, ordered bool) string {
 	str := ""
 	switch {
 	case out.ErrorMsg != "":
-		str = fmt.Sprintf("%v - status: failed, error: %v, processed in: %v\n",
+		str = fmt.Sprintf("%v - status: failed, error: %v, processed in: %.3f sec\n",
 			out.Url, out.ErrorMsg, out.ProcessedIn)
 	default:
-		str = fmt.Sprintf("%v - status: succeed, content length: %v, processed in: %v\n",
+		str = fmt.Sprintf("%v - status: succeed, content length: %v, processed in: %.3f sec\n",
 			out.Url, out.ContentLength, out.ProcessedIn)
 	}
 
