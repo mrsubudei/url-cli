@@ -24,8 +24,8 @@ func main() {
 
 	-f		input file name (required argument)
 	-s		keep the original order of urls
-	-o 		outout file name (available only with -s flag)
-	-t		custom timeout for http requests
+	-o 		output file name (available only with -s flag)
+	-t		custom timeout for http requests in sec (should be >= 1)
 
 Examples: 
 durl -f="data.txt"			read data from file data.txt and print out the answer
