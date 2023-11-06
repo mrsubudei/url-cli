@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,64 +14,74 @@ import (
 )
 
 var (
-	RequestTimeOut = time.Second * 3
+	RequestTimeOut = time.Second * 5
 
-	ErrNotExpectedStatusCode = errors.New("status code is not expected")
-	ErrNoResponse            = errors.New("no response from url")
+	ErrNoResponse = errors.New("no response from url")
 )
 
-func Handle(urls []string, sequentially bool) {
-	if sequentially {
-		KeepSequence(urls)
-	} else {
-		FastHandle(urls)
-	}
-}
-
 type UrlOut struct {
+	Sequence      int
 	Url           string
 	ErrorMsg      string
 	ContentLength int64
 	ProcessedIn   float64
 }
 
-func KeepSequence(urls []string) {
-	out := make([]UrlOut, len(urls))
+func Handle(urls []string, sequentially bool, outFileName string) error {
+	switch sequentially {
+	case true:
+		out := KeepSequence(urls)
+		if outFileName != "" {
+			return writeToFile(out, outFileName)
+		} else {
+			printData(out)
+		}
+	case false:
+		FastHandle(urls)
+	}
 
-	mu := &sync.Mutex{}
+	return nil
+}
+
+func KeepSequence(urls []string) []UrlOut {
+	c := make(chan UrlOut)
+
 	wg := &sync.WaitGroup{}
 	wg.Add(len(urls))
 
-	for i, val := range urls {
-		go func(idx int, url string) {
-			defer wg.Done()
+	go func() {
+		for i, val := range urls {
+			go func(idx int, url string) {
+				defer wg.Done()
 
-			now := time.Now()
-			lenght, err := Get(url)
-			procT := time.Since(now).Seconds()
-
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				out[idx].ErrorMsg = err.Error()
-			}
-			out[idx].ContentLength = lenght
-			out[idx].Url = url
-			out[idx].ProcessedIn = procT
-		}(i, val)
-	}
-
-	wg.Wait()
-
-	for i, val := range out {
-		if val.ErrorMsg != "" {
-			fmt.Printf("%d. %v - status: failed, error: %v, processed in: %v\n",
-				i+1, val.Url, val.ErrorMsg, val.ProcessedIn)
-		} else {
-			fmt.Printf("%d. %v - status: succeed, content length: %v, processed in: %v\n",
-				i+1, val.Url, val.ContentLength, val.ProcessedIn)
+				now := time.Now()
+				lenght, err := get(url)
+				procT := time.Since(now).Seconds()
+				ans := UrlOut{
+					Sequence:      idx,
+					Url:           url,
+					ContentLength: lenght,
+					ProcessedIn:   procT,
+				}
+				if err != nil {
+					ans.ErrorMsg = err.Error()
+				}
+				c <- ans
+			}(i, val)
 		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(c)
+	}()
+
+	out := make([]UrlOut, len(urls))
+	for val := range c {
+		out[val.Sequence] = val
 	}
+
+	return out
 }
 
 func FastHandle(urls []string) {
@@ -81,20 +92,24 @@ func FastHandle(urls []string) {
 			defer wg.Done()
 
 			now := time.Now()
-			lenght, err := Get(url)
+			lenght, err := get(url)
 			procT := time.Since(now).Seconds()
-			if err != nil {
-				fmt.Printf("%v - status: failed, error: %v, processed in: %v\n", url, err.Error(), procT)
-			} else {
-				fmt.Printf("%v - status: succeed, content length: %v, processed in: %v\n", url, lenght, procT)
+			out := UrlOut{
+				Url:           url,
+				ContentLength: lenght,
+				ProcessedIn:   procT,
 			}
+			if err != nil {
+				out.ErrorMsg = err.Error()
+			}
+			fmt.Print(createStrFromUrlOut(out, false))
 		}(val)
 	}
 
 	wg.Wait()
 }
 
-func Get(url string) (int64, error) {
+func get(url string) (int64, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return 0, err
@@ -114,7 +129,7 @@ func Get(url string) (int64, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, ErrNotExpectedStatusCode
+		return 0, fmt.Errorf(fmt.Sprintf("status code %d is not expected", resp.StatusCode))
 	}
 
 	for key, values := range resp.Header {
@@ -137,4 +152,45 @@ func Get(url string) (int64, error) {
 	}
 
 	return int64(len(body)), nil
+}
+
+func writeToFile(out []UrlOut, outFileName string) error {
+	var sb strings.Builder
+	for _, val := range out {
+		str := createStrFromUrlOut(val, true)
+		sb.WriteString(str)
+	}
+
+	f, err := os.Create(outFileName)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	f.Write([]byte(sb.String()))
+
+	return nil
+}
+
+func printData(out []UrlOut) {
+	for _, val := range out {
+		fmt.Print(createStrFromUrlOut(val, true))
+	}
+}
+
+func createStrFromUrlOut(out UrlOut, ordered bool) string {
+	str := ""
+	switch {
+	case out.ErrorMsg != "":
+		str = fmt.Sprintf("%v - status: failed, error: %v, processed in: %v\n",
+			out.Url, out.ErrorMsg, out.ProcessedIn)
+	default:
+		str = fmt.Sprintf("%v - status: succeed, content length: %v, processed in: %v\n",
+			out.Url, out.ContentLength, out.ProcessedIn)
+	}
+
+	if ordered {
+		str = fmt.Sprintf("%d. %v", out.Sequence+1, str)
+	}
+
+	return str
 }
