@@ -10,7 +10,6 @@ import (
 )
 
 func main() {
-	fmt.Println("test")
 	// parse flags
 	fileName := flag.String("i", "", "a string")
 	sequentially := flag.Bool("s", false, "a bool")
