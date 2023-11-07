@@ -7,8 +7,8 @@ In Fast mode, program reads data from file,
 and prints the result as soon as the answer is ready.   
 
 In keep sequence mode, the program keeps the original order of urls,   
-and provides the result after all  urls handled. Also, in this mode  
-it is possible to save results in file, flag -o={file name}.  
+and provides the result after all  urls handled. But, additional memory is allocated.  
+Also, in this mode it is possible to save results in file, flag -o={file name}.  
 
 By default, http request are done with timeout 5 sec.   
 To change it, pass flag -t={number}.  
