@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -18,7 +19,6 @@ var (
 )
 
 type UrlIn struct {
-	Urls         []string
 	IsSequential bool
 	OutFileName  string
 	ReqTimeout   int
@@ -32,17 +32,26 @@ type UrlOut struct {
 	ProcessedIn   float64
 }
 
-func Handle(in UrlIn) error {
+func Handle(in UrlIn, file *os.File) error {
 	switch in.IsSequential {
 	case true:
-		out := KeepSequence(in.Urls, in.ReqTimeout)
+		fileScanner := bufio.NewScanner(file)
+		urls := []string{}
+		for fileScanner.Scan() {
+			url := strings.TrimSpace(fileScanner.Text())
+			if url != "" {
+				urls = append(urls, url)
+			}
+		}
+
+		out := KeepSequence(urls, in.ReqTimeout)
 		if in.OutFileName != "" {
 			return writeToFile(out, in.OutFileName)
 		} else {
 			printData(out)
 		}
 	case false:
-		FastHandle(in.Urls, in.ReqTimeout)
+		FastHandle(file, in.ReqTimeout)
 	}
 
 	return nil
@@ -89,26 +98,31 @@ func KeepSequence(urls []string, reqTimeout int) []UrlOut {
 	return out
 }
 
-func FastHandle(urls []string, reqTimeout int) {
+func FastHandle(file *os.File, reqTimeout int) {
 	wg := &sync.WaitGroup{}
-	wg.Add(len(urls))
-	for _, val := range urls {
-		go func(url string) {
-			defer wg.Done()
+	fileScanner := bufio.NewScanner(file)
 
-			now := time.Now()
-			lenght, err := get(url, reqTimeout)
-			procT := time.Since(now).Seconds()
-			out := UrlOut{
-				Url:           url,
-				ContentLength: lenght,
-				ProcessedIn:   procT,
-			}
-			if err != nil {
-				out.ErrorMsg = err.Error()
-			}
-			fmt.Print(createStrFromUrlOut(out, false))
-		}(val)
+	for fileScanner.Scan() {
+		line := strings.TrimSpace(fileScanner.Text())
+		if line != "" {
+			wg.Add(1)
+			go func(url string) {
+				defer wg.Done()
+
+				now := time.Now()
+				lenght, err := get(url, reqTimeout)
+				procT := time.Since(now).Seconds()
+				out := UrlOut{
+					Url:           url,
+					ContentLength: lenght,
+					ProcessedIn:   procT,
+				}
+				if err != nil {
+					out.ErrorMsg = err.Error()
+				}
+				fmt.Print(createStrFromUrlOut(out, false))
+			}(line)
+		}
 	}
 
 	wg.Wait()

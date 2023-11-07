@@ -1,18 +1,18 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/mrsubudei/url-cli/service"
 )
 
 func main() {
-	fileName := flag.String("f", "", "a string")
+	fmt.Println("test")
+	// parse flags
+	fileName := flag.String("i", "", "a string")
 	sequentially := flag.Bool("s", false, "a bool")
 	outFile := flag.String("o", "", "a string")
 	reqTimeout := flag.Int("t", 0, "an int")
@@ -20,17 +20,17 @@ func main() {
 	flag.Parse()
 
 	if *fileName == "" || len(flag.Args()) != 0 {
-		fmt.Println(`Usage: durl -f="{file name}" [OPTION]...
+		fmt.Println(`Usage: durl -i="{file name}" [OPTION]...
 
-	-f		input file name (required argument)
+	-i		input file name (required argument)
 	-s		keep the original order of urls
 	-o 		output file name (available only with -s flag)
-	-t		custom timeout for http requests in sec (should be >= 1)
+	-t		custom timeout for http requests in sec (should be greater than 0)
 
 Examples: 
-durl -f="data.txt"			read data from file data.txt and print out the answer
-durl -f="data.txt" -s -o="output.txt"	save the answer to output.txt
-durl -f="data.txt" -t=10		set request timeout to 10 sec`)
+durl -i="data.txt"			read data from file data.txt and print out the answer
+durl -i="data.txt" -s -o="output.txt"	save the answer to output.txt
+durl -i="data.txt" -t=10		set request timeout to 10 sec`)
 		return
 	}
 
@@ -39,32 +39,24 @@ durl -f="data.txt" -t=10		set request timeout to 10 sec`)
 		return
 	}
 
-	if *reqTimeout < 1 {
-		fmt.Println("request timeout should be integer greater or equal to 1")
+	if *reqTimeout < 0 {
+		fmt.Println("request timeout should be integer greater than 0")
 		return
 	}
 
+	// open file
 	readFile, err := os.Open(*fileName)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer readFile.Close()
 
-	fileScanner := bufio.NewScanner(readFile)
-	urls := []string{}
-	for fileScanner.Scan() {
-		url := strings.TrimSpace(fileScanner.Text())
-		if url != "" {
-			urls = append(urls, url)
-		}
-	}
-
+	// handle
 	err = service.Handle(service.UrlIn{
-		Urls:         urls,
 		IsSequential: *sequentially,
 		OutFileName:  *outFile,
 		ReqTimeout:   *reqTimeout,
-	})
+	}, readFile)
 	if err != nil {
 		log.Fatal(err)
 	}

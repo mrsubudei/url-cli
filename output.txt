@@ -1,0 +1,5 @@
+1. https://yandex.ru - status: succeed, content length: 15671, processed in: 0.684 sec
+2. https://google.ru - status: succeed, content length: 18624, processed in: 0.624 sec
+3. sdfsef - status: failed, error: Get "sdfsef": unsupported protocol scheme "", processed in: 0.000 sec
+4. https://sef234 - status: failed, error: Get "https://sef234": dial tcp: lookup sef234 on 127.0.0.53:53: server misbehaving, processed in: 2.045 sec
+5. https://olx.kz - status: succeed, content length: 1112597, processed in: 1.008 sec
