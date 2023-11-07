@@ -36,7 +36,7 @@ durl -i="{file name}" [OPTION]...
 	-t		custom timeout for http requests in sec (should be greater than 0)
 
 Examples: 
-durl -i="data.txt"						read data from file data.txt and print out the answer
+durl -i="data.txt"				read data from file data.txt and print out the answer
 durl -i="data.txt" 	-s -o="output.txt"	save the answer to output.txt
-durl -i="data.txt" -t=10				set request timeout to 10 sec
+durl -i="data.txt" -t=10			set request timeout to 10 sec
 ```  
